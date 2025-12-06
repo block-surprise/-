@@ -271,6 +271,20 @@
         document.getElementById("navbar").innerHTML = html;
       });
   </script>
+  <script>
+  // Androidからの歩数データを受け取って、自動入力する
+  window.addEventListener("message", (event) => {
+    if (event.data && event.data.type === "stepCount") {
+      const count = event.data.value;
+      const stepsInput = document.getElementById("stepsCount");
+      if (stepsInput) {
+        stepsInput.value = count;
+        console.log("歩数を受信:", count);
+      }
+    }
+  });
+</script>
+
 </body>
 </html>
 
