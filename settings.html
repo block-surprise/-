@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>月録 - 設定</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      padding-bottom: 80px;
+    }
+    header {
+      background: #fff;
+      padding: 16px;
+      border-bottom: 1px solid #ddd;
+      position: sticky;
+      top: 0;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.4rem;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    section {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    }
+    section h2 {
+      font-size: 1.1rem;
+      margin-top: 0;
+    }
+    label {
+      display: block;
+      margin-top: 12px;
+      font-size: 0.9rem;
+    }
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 8px;
+      font-size: 1rem;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    button {
+      background: #3b82f6;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+    }
+    button.danger {
+      background: #ef4444;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>設定</h1>
+  </header>
+
+  <div class="container">
+    <section>
+      <h2>PWAインストール</h2>
+      <p>このアプリをホーム画面に追加して、アプリのように使えます。</p>
+      <button onclick="showInstallPrompt()">インストール案内を表示</button>
+    </section>
+
+    <section>
+      <h2>データ削除</h2>
+      <label for="deleteMonth">削除する月（YYYY-MM）</label>
+      <input type="month" id="deleteMonth" />
+      <button class="danger" onclick="deleteMonthData()">この月のデータを削除</button>
+      <hr />
+      <button class="danger" onclick="deleteAllData()">すべてのデータを削除</button>
+    </section>
+  </div>
+
+  <div id="navbar"></div>
+
+  <script>
+    let deferredPrompt = null;
+
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+    });
+
+    function showInstallPrompt() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(choiceResult => {
+          if (choiceResult.outcome === "accepted") {
+            alert("インストールが開始されました！");
+          } else {
+            alert("インストールがキャンセルされました。");
+          }
+          deferredPrompt = null;
+        });
+      } else {
+        alert("インストールの準備がまだできていません。");
+      }
+    }
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open("MyMonthDB_v2", 1);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function deleteMonthData() {
+      const month = document.getElementById("deleteMonth").value;
+      if (!month) return alert("削除する月を選んでね！");
+      const db = await openDB();
+      const tx = db.transaction("monthlyData", "readwrite");
+      tx.objectStore("monthlyData").delete(month);
+      alert(`${month} のデータを削除しました。`);
+    }
+
+    async function deleteAllData() {
+      if (!confirm("本当にすべてのデータを削除しますか？")) return;
+      const db = await openDB();
+      const tx = db.transaction("monthlyData", "readwrite");
+      tx.objectStore("monthlyData").clear();
+      alert("すべてのデータを削除しました。");
+    }
+
+    // ナビゲーションバー読み込み
+    fetch("navbar.html")
+      .then(res => res.text())
+      .then(html => {
+        document.getElementById("navbar").innerHTML = html;
+      });
+  </script>
+</body>
+</html>
