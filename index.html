@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>今月のじぶん - ホーム</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      padding-bottom: 80px;
+    }
+    header {
+      background: #fff;
+      padding: 16px;
+      border-bottom: 1px solid #ddd;
+      position: sticky;
+      top: 0;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.4rem;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    .month-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 16px 0;
+    }
+    .summary-box {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+      margin-bottom: 16px;
+    }
+    .summary-box h2 {
+      font-size: 1.1rem;
+      margin-top: 0;
+    }
+    .summary-box p {
+      margin: 6px 0;
+    }
+    .nav-placeholder {
+      height: 60px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>今月のじぶん</h1>
+  </header>
+
+  <div class="container">
+    <div class="month-nav">
+      <button onclick="changeMonth(-1)">← 前月</button>
+      <input type="month" id="monthPicker" />
+      <button onclick="changeMonth(1)">翌月 →</button>
+    </div>
+
+    <div id="summaryArea">
+      <div class="summary-box">
+        <h2>歩数</h2>
+        <p id="stepsTotal">合計：— 歩</p>
+        <p id="stepsAvg">平均：— 歩/日</p>
+        <p id="stepsMax">最大：— 歩</p>
+      </div>
+
+      <div class="summary-box">
+        <h2>支出</h2>
+        <p id="expTotal">合計：— 円</p>
+        <p id="expAvg">平均：— 円/件</p>
+        <p id="expTopCat">最多カテゴリ：—</p>
+      </div>
+
+      <div class="summary-box">
+        <h2>予定</h2>
+        <p id="calCount">件数：— 件</p>
+        <p id="calTotal">総時間：— 分</p>
+        <p id="calAvg">平均：— 分/件</p>
+      </div>
+
+      <div class="summary-box">
+        <h2>SNS投稿</h2>
+        <p id="snsTotal">合計：— 件</p>
+        <p id="snsBreakdown">内訳：—</p>
+      </div>
+
+      <div class="summary-box">
+        <h2>気分</h2>
+        <p id="moodDays">記録日数：— 日</p>
+        <p id="moodTop">最多：—</p>
+      </div>
+
+      <div class="summary-box">
+        <h2>今月のひとこと</h2>
+        <p id="monthlyNote">—</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="navbar"></div>
+
+  <script>
+    const monthInput = document.getElementById("monthPicker");
+    const today = new Date();
+    monthInput.value = today.toISOString().slice(0, 7);
+
+    function changeMonth(offset) {
+      const [year, month] = monthInput.value.split("-").map(Number);
+      const newDate = new Date(year, month - 1 + offset);
+      const newMonth = newDate.toISOString().slice(0, 7);
+      monthInput.value = newMonth;
+      loadSummary(newMonth);
+    }
+
+    monthInput.addEventListener("change", () => {
+      loadSummary(monthInput.value);
+    });
+
+    function loadSummary(monthKey) {
+      const request = indexedDB.open("MyMonthDB_v2", 1);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction("monthlyData", "readonly");
+        const store = tx.objectStore("monthlyData");
+        const getReq = store.get(monthKey);
+        getReq.onsuccess = () => {
+          const data = getReq.result;
+          if (!data) {
+            document.getElementById("summaryArea").innerHTML = "<p>この月のデータはまだありません。</p>";
+            return;
+          }
+          const steps = data.steps.map(s => s.count);
+          const exp = data.expenses;
+          const cal = data.calendarEvents;
+          const sns = data.snsPosts;
+          const moods = data.moods;
+
+          document.getElementById("stepsTotal").textContent = `合計：${sum(steps)} 歩`;
+          document.getElementById("stepsAvg").textContent = `平均：${avg(steps)} 歩/日`;
+          document.getElementById("stepsMax").textContent = `最大：${Math.max(...steps, 0)} 歩`;
+
+          const expTotal = sum(exp.map(e => e.amount));
+          const expAvg = avg(exp.map(e => e.amount));
+          const catMap = {};
+          exp.forEach(e => {
+            catMap[e.category] = (catMap[e.category] || 0) + e.amount;
+          });
+          const topCat = Object.entries(catMap).sort((a,b)=>b[1]-a[1])[0]?.[0] || "—";
+          document.getElementById("expTotal").textContent = `合計：¥${expTotal}`;
+          document.getElementById("expAvg").textContent = `平均：¥${expAvg} /件`;
+          document.getElementById("expTopCat").textContent = `最多カテゴリ：${topCat}`;
+
+          document.getElementById("calCount").textContent = `件数：${cal.length} 件`;
+          const calDur = cal.map(c => c.duration);
+          document.getElementById("calTotal").textContent = `総時間：${sum(calDur)} 分`;
+          document.getElementById("calAvg").textContent = `平均：${avg(calDur)} 分/件`;
+
+          const snsMap = {};
+          sns.forEach(s => {
+            snsMap[s.platform] = (snsMap[s.platform] || 0) + s.count;
+          });
+          const snsTotal = sum(Object.values(snsMap));
+          const snsBreak = Object.entries(snsMap).map(([k,v]) => `${k}:${v}`).join(", ");
+          document.getElementById("snsTotal").textContent = `合計：${snsTotal} 件`;
+          document.getElementById("snsBreakdown").textContent = `内訳：${snsBreak || "—"}`;
+
+          const moodMap = {};
+          moods.forEach(m => {
+            moodMap[m.emoji] = (moodMap[m.emoji] || 0) + 1;
+          });
+          const topMood = Object.entries(moodMap).sort((a,b)=>b[1]-a[1])[0]?.[0] || "—";
+          document.getElementById("moodDays").textContent = `記録日数：${moods.length} 日`;
+          document.getElementById("moodTop").textContent = `最多：${topMood}`;
+
+          document.getElementById("monthlyNote").textContent = data.monthlyNote || "（未入力）";
+        };
+      };
+    }
+
+    function sum(arr) {
+      return arr.reduce((a,b)=>a+b,0);
+    }
+    function avg(arr) {
+      return arr.length ? Math.round(sum(arr)/arr.length) : 0;
+    }
+
+    // 初期読み込み
+    loadSummary(monthInput.value);
+
+    // ナビゲーションバー読み込み
+    fetch("navbar.html")
+      .then(res => res.text())
+      .then(html => {
+        document.getElementById("navbar").innerHTML = html;
+      });
+  </script>
+</body>
+</html>
