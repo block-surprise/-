@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>月録 - レポート</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      padding-bottom: 80px;
+    }
+    header {
+      background: #fff;
+      padding: 16px;
+      border-bottom: 1px solid #ddd;
+      position: sticky;
+      top: 0;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.4rem;
+    }
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    canvas {
+      background: #fff;
+      border-radius: 12px;
+      padding: 8px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    }
+    label {
+      display: block;
+      margin: 12px 0 4px;
+    }
+    input[type="month"] {
+      padding: 6px;
+      font-size: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>月次レポート</h1>
+  </header>
+
+  <div class="container">
+    <label for="monthPicker">対象月</label>
+    <input type="month" id="monthPicker" />
+
+    <canvas id="stepsChart" height="200"></canvas>
+    <canvas id="expenseChart" height="200"></canvas>
+    <canvas id="moodChart" height="200"></canvas>
+  </div>
+
+  <div id="navbar"></div>
+
+  <script>
+    const monthInput = document.getElementById("monthPicker");
+    const today = new Date();
+    monthInput.value = today.toISOString().slice(0, 7);
+
+    monthInput.addEventListener("change", () => {
+      loadCharts(monthInput.value);
+    });
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open("MyMonthDB_v2", 1);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function getMonthData(monthKey) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction("monthlyData", "readonly");
+        const store = tx.objectStore("monthlyData");
+        const req = store.get(monthKey);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function loadCharts(monthKey) {
+      const data = await getMonthData(monthKey);
+      if (!data) return;
+
+      // 歩数グラフ
+      const steps = data.steps.sort((a,b)=>a.date.localeCompare(b.date));
+      const stepLabels = steps.map(s => s.date.slice(5));
+      const stepCounts = steps.map(s => s.count);
+      new Chart(document.getElementById("stepsChart"), {
+        type: "line",
+        data: {
+          labels: stepLabels,
+          datasets: [{
+            label: "歩数",
+            data: stepCounts,
+            borderColor: "#3b82f6",
+            backgroundColor: "rgba(59,130,246,0.2)",
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } }
+        }
+      });
+
+      // 支出カテゴリ円グラフ
+      const catMap = {};
+      data.expenses.forEach(e => {
+        catMap[e.category] = (catMap[e.category] || 0) + e.amount;
+      });
+      const catLabels = Object.keys(catMap);
+      const catValues = Object.values(catMap);
+      new Chart(document.getElementById("expenseChart"), {
+        type: "doughnut",
+        data: {
+          labels: catLabels,
+          datasets: [{
+            data: catValues,
+            backgroundColor: ["#f87171", "#fbbf24", "#34d399", "#60a5fa", "#a78bfa"]
+          }]
+        },
+        options: {
+          plugins: {
+            legend: { position: "bottom" }
+          }
+        }
+      });
+
+      // 気分グラフ
+      const moodMap = {};
+      data.moods.forEach(m => {
+        moodMap[m.emoji] = (moodMap[m.emoji] || 0) + 1;
+      });
+      const moodLabels = Object.keys(moodMap);
+      const moodCounts = Object.values(moodMap);
+      new Chart(document.getElementById("moodChart"), {
+        type: "bar",
+        data: {
+          labels: moodLabels,
+          datasets: [{
+            label: "気分の回数",
+            data: moodCounts,
+            backgroundColor: "#facc15"
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    loadCharts(monthInput.value);
+
+    // ナビゲーションバー読み込み
+    fetch("navbar.html")
+      .then(res => res.text())
+      .then(html => {
+        document.getElementById("navbar").innerHTML = html;
+      });
+  </script>
+</body>
+</html>
