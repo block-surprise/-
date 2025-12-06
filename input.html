@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>月録 - 記録</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      padding-bottom: 80px;
+    }
+    header {
+      background: #fff;
+      padding: 16px;
+      border-bottom: 1px solid #ddd;
+      position: sticky;
+      top: 0;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.4rem;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    section {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    }
+    section h2 {
+      font-size: 1.1rem;
+      margin-top: 0;
+    }
+    label {
+      display: block;
+      margin-top: 12px;
+      font-size: 0.9rem;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 1rem;
+      box-sizing: border-box;
+    }
+    button {
+      margin-top: 12px;
+      padding: 10px 16px;
+      background: #3b82f6;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>記録する</h1>
+  </header>
+
+  <div class="container">
+    <label for="month">対象月</label>
+    <input type="month" id="month" />
+
+    <!-- 歩数 -->
+    <section>
+      <h2>歩数</h2>
+      <label>日付</label>
+      <input type="date" id="stepsDate" />
+      <label>歩数</label>
+      <input type="number" id="stepsCount" placeholder="例: 7500" />
+      <button onclick="saveSteps()">保存</button>
+    </section>
+
+    <!-- 支出 -->
+    <section>
+      <h2>支出</h2>
+      <label>日付</label>
+      <input type="date" id="expDate" />
+      <label>金額（円）</label>
+      <input type="number" id="expAmount" />
+      <label>カテゴリ</label>
+      <input type="text" id="expCat" placeholder="例: 食費" />
+      <button onclick="saveExpense()">保存</button>
+    </section>
+
+    <!-- 予定 -->
+    <section>
+      <h2>予定</h2>
+      <label>日付</label>
+      <input type="date" id="calDate" />
+      <label>タイトル</label>
+      <input type="text" id="calTitle" />
+      <label>所要時間（分）</label>
+      <input type="number" id="calDuration" />
+      <button onclick="saveCalendar()">保存</button>
+    </section>
+
+    <!-- SNS -->
+    <section>
+      <h2>SNS投稿</h2>
+      <label>日付</label>
+      <input type="date" id="snsDate" />
+      <label>プラットフォーム</label>
+      <select id="snsPlatform">
+        <option value="x">X</option>
+        <option value="instagram">Instagram</option>
+        <option value="youtube">YouTube</option>
+        <option value="tiktok">TikTok</option>
+      </select>
+      <label>投稿数</label>
+      <input type="number" id="snsCount" />
+      <button onclick="saveSNS()">保存</button>
+    </section>
+
+    <!-- 気分 -->
+    <section>
+      <h2>気分</h2>
+      <label>日付</label>
+      <input type="date" id="moodDate" />
+      <label>気分</label>
+      <select id="moodEmoji">
+        <option value="😊">😊 やや良い</option>
+        <option value="😐">😐 ふつう</option>
+        <option value="😟">😟 少し不安</option>
+        <option value="😢">😢 つかれた</option>
+        <option value="😄">😄 とても良い</option>
+      </select>
+      <label>メモ</label>
+      <input type="text" id="moodNote" />
+      <button onclick="saveMood()">保存</button>
+    </section>
+  </div>
+
+  <div id="navbar"></div>
+
+  <script>
+    const monthInput = document.getElementById("month");
+    const today = new Date();
+    monthInput.value = today.toISOString().slice(0, 7);
+
+    function getMonthKey() {
+      return monthInput.value;
+    }
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open("MyMonthDB_v2", 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains("monthlyData")) {
+            db.createObjectStore("monthlyData", { keyPath: "month" });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function getMonthData(monthKey) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction("monthlyData", "readonly");
+        const store = tx.objectStore("monthlyData");
+        const req = store.get(monthKey);
+        req.onsuccess = () => {
+          resolve(req.result || {
+            month: monthKey,
+            steps: [],
+            expenses: [],
+            calendarEvents: [],
+            snsPosts: [],
+            moods: [],
+            monthlyNote: ""
+          });
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function saveMonthData(data) {
+      const db = await openDB();
+      const tx = db.transaction("monthlyData", "readwrite");
+      tx.objectStore("monthlyData").put(data);
+    }
+
+    async function saveSteps() {
+      const date = document.getElementById("stepsDate").value;
+      const count = Number(document.getElementById("stepsCount").value);
+      if (!date || !count) return alert("日付と歩数を入力してね！");
+      const monthKey = getMonthKey();
+      const data = await getMonthData(monthKey);
+      const existing = data.steps.find(s => s.date === date);
+      if (existing) existing.count = count;
+      else data.steps.push({ date, count });
+      await saveMonthData(data);
+      alert("歩数を保存したよ！");
+    }
+
+    async function saveExpense() {
+      const date = document.getElementById("expDate").value;
+      const amount = Number(document.getElementById("expAmount").value);
+      const category = document.getElementById("expCat").value || "未分類";
+      if (!date || !amount) return alert("日付と金額を入力してね！");
+      const monthKey = getMonthKey();
+      const data = await getMonthData(monthKey);
+      data.expenses.push({ date, amount, category });
+      await saveMonthData(data);
+      alert("支出を保存したよ！");
+    }
+
+    async function saveCalendar() {
+      const date = document.getElementById("calDate").value;
+      const title = document.getElementById("calTitle").value;
+      const duration = Number(document.getElementById("calDuration").value);
+      if (!date || !title || !duration) return alert("すべて入力してね！");
+      const monthKey = getMonthKey();
+      const data = await getMonthData(monthKey);
+      data.calendarEvents.push({ date, title, duration });
+      await saveMonthData(data);
+      alert("予定を保存したよ！");
+    }
+
+    async function saveSNS() {
+      const date = document.getElementById("snsDate").value;
+      const platform = document.getElementById("snsPlatform").value;
+      const count = Number(document.getElementById("snsCount").value);
+            if (!date || !count) return alert("日付と投稿数を入力してね！");
+      const monthKey = getMonthKey();
+      const data = await getMonthData(monthKey);
+      data.snsPosts.push({ date, platform, count });
+      await saveMonthData(data);
+      alert("SNS投稿を保存したよ！");
+    }
+
+    async function saveMood() {
+      const date = document.getElementById("moodDate").value;
+      const emoji = document.getElementById("moodEmoji").value;
+      const note = document.getElementById("moodNote").value;
+      if (!date || !emoji) return alert("日付と気分を選んでね！");
+      const monthKey = getMonthKey();
+      const data = await getMonthData(monthKey);
+      const existing = data.moods.find(m => m.date === date);
+      if (existing) {
+        existing.emoji = emoji;
+        existing.note = note;
+      } else {
+        data.moods.push({ date, emoji, note });
+      }
+      await saveMonthData(data);
+      alert("気分を保存したよ！");
+    }
+
+    // ナビゲーションバー読み込み
+    fetch("navbar.html")
+      .then(res => res.text())
+      .then(html => {
+        document.getElementById("navbar").innerHTML = html;
+      });
+  </script>
+</body>
+</html>
+
